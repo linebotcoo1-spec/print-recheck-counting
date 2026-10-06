@@ -1,0 +1,8 @@
+.env
+.env.*
+!.env.example
+dev-server.mjs
+README.md
+config.js
+lib/msal-browser.min.js
+.nojekyll

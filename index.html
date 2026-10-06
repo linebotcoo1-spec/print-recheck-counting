@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ใบ Recheck สินค้า</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root { --ink:#000; --muted:#555; --paper:#fff; --desk:#d9d9d9; --hair:#ccc; --focus:#4a7bd0; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--desk); color: var(--ink);
+    font-family: Tahoma, 'Leelawadee UI', 'Sarabun', sans-serif;
+  }
+  [hidden] { display: none !important; }
+  a { color: inherit; }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  /* ---------- แถบเครื่องมือ (ไม่พิมพ์) ---------- */
+  .toolbar {
+    position: sticky; top: 0; z-index: 1;
+    display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap;
+    padding: 10px 16px; background: #fff; border-bottom: 1px solid #bbb; font-size: 14px;
+  }
+  .toolbar .left { display: flex; gap: 16px; align-items: center; }
+  .back { text-decoration: none; font-weight: bold; }
+  .back:hover { text-decoration: underline; }
+  .status { color: var(--muted); }
+  .status.error { color: #b00020; font-weight: bold; }
+  button, .btn {
+    font: inherit; font-weight: bold; padding: 8px 18px; cursor: pointer; text-decoration: none;
+    background: #000; color: #fff; border: 0; border-radius: 4px; display: inline-block;
+  }
+  button:disabled { background: #999; cursor: default; }
+
+  /* ---------- หน้าค้นหา ---------- */
+  .finder { max-width: 960px; margin: 16px auto; background: #fff; padding: 20px 24px 24px;
+            box-shadow: 0 1px 4px rgba(0,0,0,.2); }
+  .finder h1 { font-size: 20px; margin: 0 0 14px; }
+  .search { display: flex; gap: 8px; }
+  .search input {
+    flex: 1; font: inherit; font-size: 16px; padding: 9px 12px;
+    border: 1.5px solid #000; border-radius: 4px; min-width: 0;
+  }
+  .hint { font-size: 13px; color: var(--muted); margin: 8px 0 14px; }
+  table.rounds { width: 100%; border-collapse: collapse; font-size: 14px; }
+  table.rounds th { text-align: left; font-size: 13px; padding: 8px; border-bottom: 1.5px solid #000; }
+  table.rounds td { padding: 9px 8px; border-bottom: 1px solid var(--hair); vertical-align: top; }
+  table.rounds tbody tr:hover td { background: #f2f2f2; }
+  .rid  { font-weight: bold; white-space: nowrap; }
+  .when { white-space: nowrap; color: #222; }
+  .desc { color: #222; }
+  .act  { text-align: right; white-space: nowrap; }
+  .act .btn { padding: 6px 14px; font-size: 13px; }
+  .empty { padding: 24px 8px; color: var(--muted); text-align: center; }
+  @media (max-width: 640px) {
+    .finder { margin: 0; padding: 16px; box-shadow: none; }
+    table.rounds thead { display: none; }
+    table.rounds tr { display: grid; grid-template-columns: 1fr auto; padding: 8px 0;
+                      border-bottom: 1px solid var(--hair); }
+    table.rounds td { border: 0; padding: 2px 8px; }
+    .act { grid-row: 1 / span 3; grid-column: 2; align-self: center; }
+  }
+
+  /* ---------- กระดาษ A4 ---------- */
+  .sheet {
+    width: 210mm; max-width: 100%; min-height: 297mm; margin: 16px auto;
+    background: var(--paper); padding: 10mm; box-shadow: 0 1px 4px rgba(0,0,0,.25);
+  }
+  .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8mm; }
+  .doc-type { font-size: 9pt; color: #444; }
+  .doc-no   { font-size: 20pt; font-weight: bold; line-height: 1.15; margin: 0; }
+  .meta     { font-size: 8.5pt; margin-top: 1.5mm; line-height: 1.6; }
+  .qr-box { width: 30mm; text-align: center; flex: none; }
+  .qr-box svg { width: 28mm; height: 28mm; display: block; margin: 0 auto; }
+  .qr-cap  { font-size: 6.5pt; margin-top: 0.3mm; }
+  .qr-page { font-size: 7.5pt; font-weight: bold; margin-top: 0.5mm; }
+  .rule { border: 0; border-top: 1.5px solid var(--ink); margin: 1.5mm 0 0; }
+
+  @media print {
+    @page { size: A4; margin: 10mm; }
+    body { background: #fff; }
+    .toolbar, .finder { display: none !important; }
+    .sheet { width: auto; min-height: 0; margin: 0; padding: 0; box-shadow: none; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="left">
+    <a id="back" class="back" href="./" hidden>← ค้นหาใบอื่น</a>
+    <span id="status" class="status" role="status">กำลังเตรียม…</span>
+  </div>
+  <button id="btnPrint" type="button" hidden disabled>พิมพ์</button>
+</div>
+
+<!-- ===================== หน้าค้นหา ===================== -->
+<section id="finder" class="finder" hidden>
+  <h1>ค้นหาใบ Recheck</h1>
+  <form id="searchForm" class="search" role="search">
+    <input id="q" type="search" autocomplete="off"
+           placeholder="RoundId หรือคำอธิบาย" aria-label="ค้นหาด้วย RoundId หรือคำอธิบาย">
+    <button type="submit">ค้นหา</button>
+  </form>
+  <p id="hint" class="hint"></p>
+  <table class="rounds">
+    <thead><tr><th>RoundId</th><th>เวลาสร้าง</th><th>คำอธิบาย</th><th></th></tr></thead>
+    <tbody id="results"></tbody>
+  </table>
+</section>
+
+<!-- ===================== ใบพิมพ์ ===================== -->
+<main id="sheet" class="sheet" hidden>
+  <div class="head">
+    <div>
+      <div class="doc-type">ใบ Recheck สินค้า</div>
+      <h1 class="doc-no" id="docNo"></h1>
+      <div class="meta">
+        <div id="metaLine1"></div>
+        <div id="metaLine2"></div>
+      </div>
+    </div>
+    <div class="qr-box">
+      <div id="qr"></div>
+      <div class="qr-cap" id="qrCap"></div>
+      <div class="qr-page">หน้า 1 / 1</div>
+    </div>
+  </div>
+  <hr class="rule">
+</main>
+
+<script src="lib/qrcode.js"></script>
+<script>
+(async function () {
+  "use strict";
+  const AUTO_PRINT = true;    // เปิดหน้าต่างพิมพ์อัตโนมัติเมื่อโหลดใบเสร็จ
+
+  const $ = (id) => document.getElementById(id);
+  const setStatus = (msg, isError) => {
+    $("status").textContent = msg;
+    $("status").className = "status" + (isError ? " error" : "");
+  };
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const fmtDate = (v) => v ? new Date(v).toLocaleString("en-GB", {
+    day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false
+  }).replace(",", "") : "";
+  const printUrl = (rid) => "?" + new URLSearchParams({ id: rid, ...(isDemo ? { demo: "1" } : {}) });
+
+  // ---------- อ่านพารามิเตอร์ ----------
+  const params = new URLSearchParams(location.search);
+  const getParam = (...names) => {
+    for (const [k, v] of params) if (names.includes(k.toLowerCase()) && v) return v.trim();
+    return "";
+  };
+  const isDemo = getParam("demo") === "1";
+  const roundId = getParam("id", "roundid");
+  const q0 = getParam("q");
+
+  try {
+    if (roundId) await showPrint(roundId);
+    else await showFinder(q0);
+  } catch (e) {
+    console.error(e);
+    setStatus(e.message || String(e), true);
+  }
+
+  // =====================================================================
+  //  หน้าค้นหา
+  // =====================================================================
+  async function showFinder(q) {
+    $("finder").hidden = false;
+    $("q").value = q;
+    $("q").focus();
+    $("searchForm").onsubmit = async (ev) => {
+      ev.preventDefault();
+      const v = $("q").value.trim();
+      history.replaceState(null, "", v ? "?" + new URLSearchParams({ q: v, ...(isDemo ? { demo: "1" } : {}) })
+                                         : (isDemo ? "?demo=1" : location.pathname));
+      await runSearch(v);
+    };
+    await runSearch(q);
+  }
+
+  async function runSearch(q) {
+    setStatus("กำลังค้นหา…");
+    $("results").innerHTML = "";
+    let rows, top;
+    if (isDemo) {
+      const s = q.toLowerCase();
+      rows = demoRounds().filter((r) => !q ||
+        r.roundId.toLowerCase().includes(s) || r.description.toLowerCase().includes(s));
+      top = 50;
+    } else {
+      ({ rows, top } = await api("api/rounds" + (q ? "?" + new URLSearchParams({ q }) : "")));
+    }
+
+    $("results").innerHTML = rows.length
+      ? rows.map((r) => {
+          return "<tr>" +
+            '<td class="rid"><a href="' + esc(printUrl(r.roundId)) + '">' + esc(r.roundId) + "</a></td>" +
+            '<td class="when">' + esc(fmtDate(r.createdOn)) + "</td>" +
+            '<td class="desc">' + esc(r.description) + "</td>" +
+            '<td class="act"><a class="btn" href="' + esc(printUrl(r.roundId)) + '">พิมพ์</a></td>' +
+            "</tr>";
+        }).join("")
+      : '<tr><td colspan="4" class="empty">ไม่พบรายการ' + (q ? "ที่ตรงกับ “" + esc(q) + "”" : "") + "</td></tr>";
+
+    $("hint").textContent = q
+      ? "ผลการค้นหา “" + q + "” " + rows.length + " รายการ" + (rows.length >= top ? " (แสดง " + top + " รายการล่าสุด พิมพ์คำค้นให้เจาะจงขึ้น)" : "")
+      : "รายการล่าสุด " + rows.length + " รายการ — ค้นหาได้ด้วย RoundId หรือคำอธิบาย";
+    setStatus(isDemo ? "ข้อมูลตัวอย่าง" : "พร้อม");
+  }
+
+  // =====================================================================
+  //  ใบพิมพ์
+  // =====================================================================
+  async function showPrint(id) {
+    $("back").href = isDemo ? "?demo=1" : location.pathname;
+    $("back").hidden = false;
+    $("btnPrint").hidden = false;
+    setStatus("กำลังดึงข้อมูล " + id + " …");
+
+    const doc = isDemo ? demoRound(id) : await api("api/round?" + new URLSearchParams({ id }));
+
+    render(doc);
+    await document.fonts.ready;
+    $("btnPrint").disabled = false;
+    $("btnPrint").onclick = () => window.print();
+    setStatus("พร้อมพิมพ์ · " + id + (isDemo ? " (ข้อมูลตัวอย่าง)" : ""));
+    if (AUTO_PRINT && !isDemo) setTimeout(() => window.print(), 300);
+  }
+
+  // doc = { roundId, warehouse, createdOn, lines: null | { brands, roundNos, zones, locations, items } }
+  function render(doc) {
+    const rid = doc.roundId;
+    const sep = " &nbsp;·&nbsp; ";
+    const L = doc.lines || {};
+
+    const l1 = [];
+    if (L.brands && L.brands.length) l1.push("Brand: <b>" + esc(L.brands.join(", ")) + "</b>");
+    if (doc.warehouse) l1.push("คลัง: " + esc(doc.warehouse));
+    if (L.roundNos && L.roundNos.length) l1.push("รอบที่: <b>" + esc(L.roundNos.join(", ")) + "</b>");
+
+    const counts = [];
+    if (L.zones != null) counts.push(L.zones + " Zone");
+    if (L.locations != null) counts.push(L.locations + " Location");
+    if (L.items != null) counts.push(L.items + " Item");
+    const times = [];
+    if (doc.createdOn) times.push("สร้าง " + fmtDate(doc.createdOn));
+    times.push("พิมพ์ " + fmtDate(new Date()));
+
+    $("docNo").textContent = rid;
+    $("metaLine1").innerHTML = l1.join(sep);
+    $("metaLine2").innerHTML = (counts.length ? counts.join(sep) + " &nbsp;&nbsp;|&nbsp;&nbsp; " : "") + times.join(sep);
+
+    // QR: ระดับแก้ผิด M + ขอบขาว 4 ช่องตามมาตรฐาน
+    const qr = qrcode(0, "M");
+    qr.addData(rid);
+    qr.make();
+    $("qr").innerHTML = qr.createSvgTag({ cellSize: 4, margin: 16, scalable: true });
+    $("qrCap").textContent = rid;
+
+    document.title = "ใบ Recheck " + rid;
+    $("sheet").hidden = false;
+  }
+
+  // =====================================================================
+  //  เรียก API ของเว็บนี้ (api/*.js บน Vercel — secret อยู่ฝั่ง server)
+  // =====================================================================
+  async function api(path) {
+    const res = await fetch(path, { headers: { Accept: "application/json" } });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error((data && data.error) || "เรียก API ไม่สำเร็จ (" + res.status + ")");
+    return data;
+  }
+
+  // =====================================================================
+  //  ข้อมูลตัวอย่าง (?demo=1) — ดูหน้าตาได้โดยไม่ต้องต่อ Dataverse
+  // =====================================================================
+  function demoRounds() {
+    return [
+      ["RC26-00011", "2026-10-06T02:05:00Z", "Recheck DOKURO วาล์ว ส่วนต่างเกิน 5%"],
+      ["RC26-00010", "2026-10-05T08:40:00Z", "Recheck โซน 1N หลังย้ายชั้นวาง"],
+      ["RC26-00009", "2026-10-04T03:15:00Z", "นับซ้ำ Brand AISIN รอบ 2"],
+      ["RC26-00008", "2026-10-03T07:02:00Z", "Recheck สินค้าคืนจากลูกค้า"],
+      ["RC26-00007", "2026-10-02T01:30:00Z", ""]
+    ].map(([roundId, createdOn, description]) => ({ roundId, createdOn, description }));
+  }
+  function demoRound(id) {
+    const r = demoRounds().find((x) => x.roundId === id) || demoRounds()[0];
+    return {
+      roundId: r.roundId, warehouse: "DAL, 01", createdOn: r.createdOn,
+      lines: { brands: ["DOKURO"], roundNos: ["1"], zones: 3, locations: 7, items: 211 }
+    };
+  }
+})();
+</script>
+</body>
+</html>
