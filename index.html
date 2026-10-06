@@ -90,7 +90,6 @@
   table.zones .n { text-align: right; white-space: nowrap; width: 15mm; }
   table.zones .locs { line-height: 1.75; }
   table.zones tfoot td { font-weight: bold; border-top: 1.2px solid var(--ink); border-bottom: 0; }
-  table.zones tr.nf td { color: #b00020; }
   .loc { display: inline-block; white-space: nowrap; margin-right: 4.5mm; }
   .loc small { color: var(--muted); font-size: 7.5pt; }
   .lines-note { font-size: 9pt; margin-top: 3mm; }
@@ -257,7 +256,7 @@
   }
 
   // doc = { roundId, description, warehouse, createdOn, lines: null | { error } | { count, zoneCount,
-  //         locationCount, notFound, brands, roundNos, zones: [{ zone, missing, lines, locations: [{ location, lines }] }] } }
+  //         locationCount, brands, roundNos, zones: [{ zone, lines, locations: [{ location, lines }] }] } }
   function render(doc) {
     const rid = doc.roundId;
     const sep = " &nbsp;·&nbsp; ";
@@ -300,25 +299,22 @@
   function renderLines(L) {
     if (!L) return "";
     if (L.error) return '<p class="lines-note error">ดึงรายการ Lines ไม่สำเร็จ — ' + esc(L.error) + "</p>";
-    if (!L.count) return '<p class="lines-note">ยังไม่มีรายการ Lines ใน Recheck นี้</p>';
+    if (!L.count) return '<p class="lines-note">ไม่มีรายการ Lines ของคลัง DAL ใน Recheck นี้</p>';
 
-    const rows = L.zones.map((z) => {
-      const nf = z.missing;
-      return '<tr' + (nf ? ' class="nf"' : "") + ">" +
+    const rows = L.zones.map((z) =>
+      "<tr>" +
         '<td class="z">' + esc(z.zone) + "</td>" +
         '<td class="locs">' + z.locations.map((l) =>
           '<span class="loc">' + esc(l.location) + " <small>(" + l.lines + ")</small></span>").join("") + "</td>" +
-        '<td class="n">' + (nf ? "–" : z.locations.length) + "</td>" +
+        '<td class="n">' + z.locations.length + "</td>" +
         '<td class="n">' + z.lines + "</td>" +
-        "</tr>";
-    }).join("");
+      "</tr>").join("");
 
     return '<table class="zones">' +
       "<thead><tr><th>Zone</th><th>Location <small>(จำนวน line)</small></th>" +
       '<th class="n">Location</th><th class="n">Line</th></tr></thead>' +
       "<tbody>" + rows + "</tbody>" +
       '<tfoot><tr><td>รวม</td><td>' + L.zoneCount + " Zone" +
-      (L.notFound ? ' &nbsp;·&nbsp; <span style="color:#b00020">ไม่พบใน InventDim (DAL) ' + L.notFound + " line</span>" : "") +
       '</td><td class="n">' + L.locationCount + '</td><td class="n">' + L.count + "</td></tr></tfoot>" +
       "</table>";
   }
@@ -363,18 +359,16 @@
       ["1O", [["1O-3-01", 38], ["1O-3-02", 12]]],
       ["1P", [["1P-3-11", 27]]],
       ["3Q", [["3Q-1-01", 4], ["3Q-1-02", 9], ["3Q-1-03", 2], ["3Q-2-01", 5], ["3Q-2-02", 7], ["3Q-2-03", 1],
-              ["3Q-3-01", 3], ["3Q-3-02", 6], ["3Q-3-03", 2], ["3Q-4-01", 8], ["3Q-4-02", 1], ["3Q-4-03", 4]]],
-      ["ไม่พบใน InventDim (DAL)", [["#0000000150018EF6", 2]]]
-    ].map(([zone, locs], i, all) => ({
-      zone, missing: i === all.length - 1, lines: locs.reduce((a, [, n]) => a + n, 0),
+              ["3Q-3-01", 3], ["3Q-3-02", 6], ["3Q-3-03", 2], ["3Q-4-01", 8], ["3Q-4-02", 1], ["3Q-4-03", 4]]]
+    ].map(([zone, locs]) => ({
+      zone, lines: locs.reduce((a, [, n]) => a + n, 0),
       locations: locs.map(([location, lines]) => ({ location, lines }))
     }));
-    const found = zones.filter((z) => !z.missing);
     return {
       count: zones.reduce((a, z) => a + z.lines, 0),
-      zoneCount: found.length,
-      locationCount: found.reduce((a, z) => a + z.locations.length, 0),
-      notFound: 2, brands: null, roundNos: null, zones
+      zoneCount: zones.length,
+      locationCount: zones.reduce((a, z) => a + z.locations.length, 0),
+      brands: null, roundNos: null, zones
     };
   }
 })();

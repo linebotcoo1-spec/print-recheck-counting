@@ -3,7 +3,6 @@ import { LINES as L, ROUNDS as R } from "./_lib/config.js";
 import { HttpError, dvGet, dvGetAll, handle, odataStr, param, shown } from "./_lib/dataverse.js";
 import INVENTDIM from "./_lib/inventdim.js";
 
-const NOT_FOUND = "ไม่พบใน InventDim (DAL)";
 const byText = (a, b) => a.localeCompare(b, "th", { numeric: true });
 
 export default handle(async (query) => {
@@ -37,25 +36,25 @@ export default handle(async (query) => {
   };
 });
 
-// → { count, zoneCount, locationCount, notFound, brands, roundNos,
-//     zones: [{ zone, missing, lines, locations: [{ location, lines }] }] }
-//   missing = กลุ่ม inventDimId ที่ไม่พบใน InventDim (location = inventDimId)
+// → { count, zoneCount, locationCount, brands, roundNos,
+//     zones: [{ zone, lines, locations: [{ location, lines }] }] }
+// นับเฉพาะ line ที่ inventDimId อยู่ใน InventDim (DAL) — นอกนั้นตัดทิ้ง
 async function summarizeLines(id, guid) {
   const LC = L.COLUMNS;
   const cols = [...new Set([L.INVENTDIM, LC.brand, LC.roundNo].filter(Boolean))];
   const filter = L.FILTER.replace("{id}", odataStr(id)).replace("{guid}", guid);
-  const rows = await dvGetAll(L.TABLE + "?$select=" + cols.join(",") +
-                              "&$filter=" + encodeURIComponent(filter));
+  const all = await dvGetAll(L.TABLE + "?$select=" + cols.join(",") +
+                             "&$filter=" + encodeURIComponent(filter));
 
   // zone → location → จำนวน line
   const zones = new Map();
-  let notFound = 0;
-  for (const r of rows) {
+  const rows = [];
+  for (const r of all) {
     const dimId = String(shown(r, L.INVENTDIM) ?? "").trim();
     const hit = INVENTDIM[dimId.replace(/^#/, "").toUpperCase()];
-    let zone, location;
-    if (hit) [location, zone] = [hit[0] || "(ไม่มี Location)", hit[1] || "(ไม่มี Zone)"];
-    else { notFound++; zone = NOT_FOUND; location = dimId || "(ว่าง)"; }
+    if (!hit) continue;
+    rows.push(r);
+    const [location, zone] = [hit[0] || "(ไม่มี Location)", hit[1] || "(ไม่มี Zone)"];
 
     if (!zones.has(zone)) zones.set(zone, new Map());
     const locs = zones.get(zone);
@@ -64,13 +63,11 @@ async function summarizeLines(id, guid) {
 
   const list = [...zones].map(([zone, locs]) => ({
     zone,
-    missing: zone === NOT_FOUND,
     lines: [...locs.values()].reduce((a, b) => a + b, 0),
     locations: [...locs].map(([location, n]) => ({ location, lines: n }))
                         .sort((a, b) => byText(a.location, b.location))
-  })).sort((a, b) => a.missing - b.missing || byText(a.zone, b.zone));
+  })).sort((a, b) => byText(a.zone, b.zone));
 
-  const found = list.filter((z) => !z.missing);
   const distinct = (c) => c
     ? [...new Set(rows.map((r) => shown(r, c)).filter((v) => v !== null && v !== undefined && v !== ""))]
         .map(String).sort(byText)
@@ -78,9 +75,8 @@ async function summarizeLines(id, guid) {
 
   return {
     count:         rows.length,
-    zoneCount:     found.length,
-    locationCount: found.reduce((a, z) => a + z.locations.length, 0),
-    notFound,
+    zoneCount:     list.length,
+    locationCount: list.reduce((a, z) => a + z.locations.length, 0),
     brands:        distinct(LC.brand),
     roundNos:      distinct(LC.roundNo),
     zones:         list
