@@ -77,11 +77,29 @@
   .qr-box { width: 30mm; text-align: center; flex: none; }
   .qr-box svg { width: 28mm; height: 28mm; display: block; margin: 0 auto; }
   .qr-cap  { font-size: 6.5pt; margin-top: 0.3mm; }
-  .qr-page { font-size: 7.5pt; font-weight: bold; margin-top: 0.5mm; }
   .rule { border: 0; border-top: 1.5px solid var(--ink); margin: 1.5mm 0 0; }
 
+  /* ---------- ตาราง Zone → Location ---------- */
+  table.zones { width: 100%; border-collapse: collapse; margin-top: 3mm; font-size: 9pt; }
+  table.zones thead { display: table-header-group; }          /* หัวตารางซ้ำทุกหน้าตอนพิมพ์ */
+  table.zones th { text-align: left; font-size: 8pt; padding: 1.2mm 1.5mm; border-bottom: 1.2px solid var(--ink); }
+  table.zones td { padding: 1.6mm 1.5mm; border-bottom: 0.5px solid #999; vertical-align: top; }
+  table.zones tr { break-inside: avoid; }
+  table.zones .z { font-size: 11pt; font-weight: bold; white-space: nowrap; width: 22mm; }
+  table.zones .n { text-align: right; white-space: nowrap; width: 15mm; }
+  table.zones .locs { line-height: 1.75; }
+  table.zones tfoot td { font-weight: bold; border-top: 1.2px solid var(--ink); border-bottom: 0; }
+  table.zones tr.nf td { color: #b00020; }
+  .loc { display: inline-block; white-space: nowrap; margin-right: 4.5mm; }
+  .loc small { color: var(--muted); font-size: 7.5pt; }
+  .lines-note { font-size: 9pt; margin-top: 3mm; }
+  .lines-note.error { color: #b00020; font-weight: bold; }
+
   @media print {
-    @page { size: A4; margin: 10mm; }
+    @page {
+      size: A4; margin: 10mm;
+      @bottom-right { content: "หน้า " counter(page) " / " counter(pages); font: 7.5pt Tahoma, sans-serif; }
+    }
     body { background: #fff; }
     .toolbar, .finder { display: none !important; }
     .sheet { width: auto; min-height: 0; margin: 0; padding: 0; box-shadow: none; }
@@ -128,10 +146,10 @@
     <div class="qr-box">
       <div id="qr"></div>
       <div class="qr-cap" id="qrCap"></div>
-      <div class="qr-page">หน้า 1 / 1</div>
     </div>
   </div>
   <hr class="rule">
+  <div id="lines"></div>
 </main>
 
 <script src="lib/qrcode.js"></script>
@@ -236,11 +254,12 @@
     if (AUTO_PRINT && !isDemo) setTimeout(() => window.print(), 300);
   }
 
-  // doc = { roundId, warehouse, createdOn, lines: null | { brands, roundNos, zones, locations, items } }
+  // doc = { roundId, warehouse, createdOn, lines: null | { error } | { count, zoneCount, locationCount,
+  //         notFound, brands, roundNos, zones: [{ zone, lines, locations: [{ location, lines }] }] } }
   function render(doc) {
     const rid = doc.roundId;
     const sep = " &nbsp;·&nbsp; ";
-    const L = doc.lines || {};
+    const L = (doc.lines && !doc.lines.error) ? doc.lines : {};
 
     const l1 = [];
     if (L.brands && L.brands.length) l1.push("Brand: <b>" + esc(L.brands.join(", ")) + "</b>");
@@ -248,9 +267,11 @@
     if (L.roundNos && L.roundNos.length) l1.push("รอบที่: <b>" + esc(L.roundNos.join(", ")) + "</b>");
 
     const counts = [];
-    if (L.zones != null) counts.push(L.zones + " Zone");
-    if (L.locations != null) counts.push(L.locations + " Location");
-    if (L.items != null) counts.push(L.items + " Item");
+    if (L.zones) {
+      counts.push("<b>" + L.zoneCount + "</b> Zone");
+      counts.push("<b>" + L.locationCount + "</b> Location");
+      counts.push("<b>" + L.count + "</b> Line");
+    }
     const times = [];
     if (doc.createdOn) times.push("สร้าง " + fmtDate(doc.createdOn));
     times.push("พิมพ์ " + fmtDate(new Date()));
@@ -266,8 +287,36 @@
     $("qr").innerHTML = qr.createSvgTag({ cellSize: 4, margin: 16, scalable: true });
     $("qrCap").textContent = rid;
 
+    $("lines").innerHTML = renderLines(doc.lines);
     document.title = "ใบ Recheck " + rid;
     $("sheet").hidden = false;
+  }
+
+  // ตาราง Zone → Location (จำนวน line ในวงเล็บ)
+  function renderLines(L) {
+    if (!L) return "";
+    if (L.error) return '<p class="lines-note error">ดึงรายการ Lines ไม่สำเร็จ — ' + esc(L.error) + "</p>";
+    if (!L.count) return '<p class="lines-note">ยังไม่มีรายการ Lines ใน Recheck นี้</p>';
+
+    const rows = L.zones.map((z) => {
+      const nf = z.zone === "ไม่พบใน InventDim";
+      return '<tr' + (nf ? ' class="nf"' : "") + ">" +
+        '<td class="z">' + esc(z.zone) + "</td>" +
+        '<td class="locs">' + z.locations.map((l) =>
+          '<span class="loc">' + esc(l.location) + " <small>(" + l.lines + ")</small></span>").join("") + "</td>" +
+        '<td class="n">' + (nf ? "–" : z.locations.length) + "</td>" +
+        '<td class="n">' + z.lines + "</td>" +
+        "</tr>";
+    }).join("");
+
+    return '<table class="zones">' +
+      "<thead><tr><th>Zone</th><th>Location <small>(จำนวน line)</small></th>" +
+      '<th class="n">Location</th><th class="n">Line</th></tr></thead>' +
+      "<tbody>" + rows + "</tbody>" +
+      '<tfoot><tr><td>รวม</td><td>' + L.zoneCount + " Zone" +
+      (L.notFound ? ' &nbsp;·&nbsp; <span style="color:#b00020">ไม่พบใน InventDim ' + L.notFound + " line</span>" : "") +
+      '</td><td class="n">' + L.locationCount + '</td><td class="n">' + L.count + "</td></tr></tfoot>" +
+      "</table>";
   }
 
   // =====================================================================
@@ -301,7 +350,27 @@
     const r = demoRounds().find((x) => x.roundId === id) || demoRounds()[0];
     return {
       roundId: r.roundId, warehouse: "DAL, 01", createdOn: r.createdOn,
-      lines: { brands: ["DOKURO"], roundNos: ["1"], zones: 3, locations: 7, items: 211 }
+      lines: demoLines()
+    };
+  }
+  function demoLines() {
+    const zones = [
+      ["1N", [["1N-3-20", 26], ["1N-4-18", 46], ["1N-4-19", 64], ["1N-4-20", 3], ["1N-4-22", 67]]],
+      ["1O", [["1O-3-01", 38], ["1O-3-02", 12]]],
+      ["1P", [["1P-3-11", 27]]],
+      ["3Q", [["3Q-1-01", 4], ["3Q-1-02", 9], ["3Q-1-03", 2], ["3Q-2-01", 5], ["3Q-2-02", 7], ["3Q-2-03", 1],
+              ["3Q-3-01", 3], ["3Q-3-02", 6], ["3Q-3-03", 2], ["3Q-4-01", 8], ["3Q-4-02", 1], ["3Q-4-03", 4]]],
+      ["ไม่พบใน InventDim", [["#0DAL0001500FFFFF", 2]]]
+    ].map(([zone, locs]) => ({
+      zone, lines: locs.reduce((a, [, n]) => a + n, 0),
+      locations: locs.map(([location, lines]) => ({ location, lines }))
+    }));
+    const found = zones.filter((z) => z.zone !== "ไม่พบใน InventDim");
+    return {
+      count: zones.reduce((a, z) => a + z.lines, 0),
+      zoneCount: found.length,
+      locationCount: found.reduce((a, z) => a + z.locations.length, 0),
+      notFound: 2, brands: null, roundNos: null, zones
     };
   }
 })();

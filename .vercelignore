@@ -8,3 +8,4 @@
 /config.js
 /lib/msal-browser.min.js
 /.nojekyll
+/scripts

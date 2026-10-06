@@ -1,6 +1,10 @@
-// GET /api/round?id=RC26-00011  →  ข้อมูลหัว + สรุปจาก Lines สำหรับใบพิมพ์
+// GET /api/round?id=RC26-00011  →  ข้อมูลหัว + สรุป Zone/Location จาก Lines สำหรับใบพิมพ์
 import { LINES as L, ROUNDS as R } from "./_lib/config.js";
 import { HttpError, dvGet, dvGetAll, handle, odataStr, param, shown } from "./_lib/dataverse.js";
+import INVENTDIM from "./_lib/inventdim.js";
+
+const NOT_FOUND = "ไม่พบใน InventDim";
+const byText = (a, b) => a.localeCompare(b, "th", { numeric: true });
 
 export default handle(async (query) => {
   const id = param(query, "id");
@@ -13,35 +17,69 @@ export default handle(async (query) => {
   const head = (await dvGet(url)).value[0];
   if (!head) throw new HttpError(404, "ไม่พบ RoundId: " + id);
 
-  // 2) Lines (ถ้าตั้งค่าไว้) — ส่งกลับเฉพาะค่าสรุป ไม่ส่งแถวดิบ
-  let summary = null;
+  // 2) Lines — ถ้าดึงไม่ได้ ใบพิมพ์ยังพิมพ์หัวได้ แล้วแสดง error แทนตาราง
+  let lines = null;
   if (L.TABLE) {
-    const LC = L.COLUMNS;
-    const lineCols = [...new Set(Object.values(LC).filter(Boolean))];
-    if (!lineCols.length) throw new HttpError(500, "ตั้งค่า LINES.TABLE แล้ว แต่ยังไม่ได้ระบุ LINES.COLUMNS");
-    const filter = L.FILTER.replace("{id}", odataStr(id)).replace("{guid}", head[R.GUID]);
-    const lines = await dvGetAll(L.TABLE + "?$select=" + lineCols.join(",") +
-                                 "&$filter=" + encodeURIComponent(filter));
-
-    const distinct = (c) => c
-      ? [...new Set(lines.map((r) => shown(r, c)).filter((v) => v !== null && v !== undefined && v !== ""))]
-          .map(String).sort((a, b) => a.localeCompare(b, "th", { numeric: true }))
-      : null;
-    const count = (c) => { const d = distinct(c); return d ? d.length : null; };
-
-    summary = {
-      brands:    distinct(LC.brand),
-      roundNos:  distinct(LC.roundNo),
-      zones:     count(LC.zone),
-      locations: count(LC.location),
-      items:     count(LC.item)
-    };
+    try {
+      lines = await summarizeLines(id, head[R.GUID]);
+    } catch (e) {
+      if (!(e instanceof HttpError)) throw e;
+      lines = { error: e.message };
+    }
   }
 
   return {
     roundId:   head[R.ROUND_ID],
     warehouse: (R.WAREHOUSE && shown(head, R.WAREHOUSE)) || "",
     createdOn: head[R.CREATED_ON] || null,
-    lines:     summary
+    lines
   };
 });
+
+// → { count, zoneCount, locationCount, notFound, brands, roundNos,
+//     zones: [{ zone, lines, locations: [{ location, lines }] }] }
+async function summarizeLines(id, guid) {
+  const LC = L.COLUMNS;
+  const cols = [...new Set([L.INVENTDIM, LC.brand, LC.roundNo].filter(Boolean))];
+  const filter = L.FILTER.replace("{id}", odataStr(id)).replace("{guid}", guid);
+  const rows = await dvGetAll(L.TABLE + "?$select=" + cols.join(",") +
+                              "&$filter=" + encodeURIComponent(filter));
+
+  // zone → location → จำนวน line
+  const zones = new Map();
+  let notFound = 0;
+  for (const r of rows) {
+    const dimId = String(shown(r, L.INVENTDIM) ?? "").trim();
+    const hit = INVENTDIM[dimId.replace(/^#/, "").toUpperCase()];
+    let zone, location;
+    if (hit) [location, zone] = [hit[0] || "(ไม่มี Location)", hit[1] || "(ไม่มี Zone)"];
+    else { notFound++; zone = NOT_FOUND; location = dimId || "(ว่าง)"; }
+
+    if (!zones.has(zone)) zones.set(zone, new Map());
+    const locs = zones.get(zone);
+    locs.set(location, (locs.get(location) || 0) + 1);
+  }
+
+  const list = [...zones].map(([zone, locs]) => ({
+    zone,
+    lines: [...locs.values()].reduce((a, b) => a + b, 0),
+    locations: [...locs].map(([location, n]) => ({ location, lines: n }))
+                        .sort((a, b) => byText(a.location, b.location))
+  })).sort((a, b) => (a.zone === NOT_FOUND) - (b.zone === NOT_FOUND) || byText(a.zone, b.zone));
+
+  const found = list.filter((z) => z.zone !== NOT_FOUND);
+  const distinct = (c) => c
+    ? [...new Set(rows.map((r) => shown(r, c)).filter((v) => v !== null && v !== undefined && v !== ""))]
+        .map(String).sort(byText)
+    : null;
+
+  return {
+    count:         rows.length,
+    zoneCount:     found.length,
+    locationCount: found.reduce((a, z) => a + z.locations.length, 0),
+    notFound,
+    brands:        distinct(LC.brand),
+    roundNos:      distinct(LC.roundNo),
+    zones:         list
+  };
+}

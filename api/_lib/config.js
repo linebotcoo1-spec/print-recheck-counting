@@ -19,21 +19,20 @@ export const ROUNDS = {
 };
 
 // ---------------------------------------------------------------
-// ตาราง Recheck Lines — ใช้นับ Item / Brand / รอบที่ / Zone / Location
+// ตาราง Recheck Lines — Zone / Location หาจาก inventDimId ผ่าน InventDim.xlsx
+// (api/_lib/inventdim.js สร้างด้วย scripts/build_inventdim.py)
 // เว้น TABLE ว่าง "" = ใบพิมพ์แสดงเฉพาะข้อมูลหัว
 // ---------------------------------------------------------------
 export const LINES = {
-  TABLE: "",                            // เช่น "crb2f_rechecklines"
+  TABLE: "crb2f_rechecklines",
   // {id} = RoundId (ข้อความ), {guid} = crb2f_recheckroundid ของหัว
   //   RoundId บน Lines เป็นข้อความ :  "crb2f_roundid eq '{id}'"
   //   RoundId บน Lines เป็น Lookup  :  "_crb2f_roundid_value eq {guid}"
   FILTER: "crb2f_roundid eq '{id}'",
-  COLUMNS: {                            // เว้น "" ถ้าไม่มี
-    item:     "",
-    brand:    "",
-    roundNo:  "",
-    zone:     "",
-    location: ""
+  INVENTDIM: "crb2f_inventdimids",      // คอลัมน์ inventDimId บน Lines
+  COLUMNS: {                            // ไม่บังคับ — เว้น "" ถ้าไม่มี
+    brand:   "",
+    roundNo: ""
   }
 };
 
