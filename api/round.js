@@ -3,7 +3,7 @@ import { LINES as L, ROUNDS as R } from "./_lib/config.js";
 import { HttpError, dvGet, dvGetAll, handle, odataStr, param, shown } from "./_lib/dataverse.js";
 import INVENTDIM from "./_lib/inventdim.js";
 
-const NOT_FOUND = "ไม่พบใน InventDim";
+const NOT_FOUND = "ไม่พบใน InventDim (DAL)";
 const byText = (a, b) => a.localeCompare(b, "th", { numeric: true });
 
 export default handle(async (query) => {
@@ -11,7 +11,7 @@ export default handle(async (query) => {
   if (!id) throw new HttpError(400, "ไม่ได้ระบุ RoundId (?id=...)");
 
   // 1) หัว Recheck Round
-  const cols = [R.GUID, R.ROUND_ID, R.WAREHOUSE, R.CREATED_ON].filter(Boolean);
+  const cols = [R.GUID, R.ROUND_ID, R.DESCRIPTION, R.WAREHOUSE, R.CREATED_ON].filter(Boolean);
   const url = R.TABLE + "?$select=" + cols.join(",") + "&$top=1&$filter=" +
               encodeURIComponent(R.ROUND_ID + " eq '" + odataStr(id) + "'");
   const head = (await dvGet(url)).value[0];
@@ -29,15 +29,17 @@ export default handle(async (query) => {
   }
 
   return {
-    roundId:   head[R.ROUND_ID],
-    warehouse: (R.WAREHOUSE && shown(head, R.WAREHOUSE)) || "",
-    createdOn: head[R.CREATED_ON] || null,
+    roundId:     head[R.ROUND_ID],
+    description: (R.DESCRIPTION && head[R.DESCRIPTION]) || "",
+    warehouse:   (R.WAREHOUSE && shown(head, R.WAREHOUSE)) || "",
+    createdOn:   head[R.CREATED_ON] || null,
     lines
   };
 });
 
 // → { count, zoneCount, locationCount, notFound, brands, roundNos,
-//     zones: [{ zone, lines, locations: [{ location, lines }] }] }
+//     zones: [{ zone, missing, lines, locations: [{ location, lines }] }] }
+//   missing = กลุ่ม inventDimId ที่ไม่พบใน InventDim (location = inventDimId)
 async function summarizeLines(id, guid) {
   const LC = L.COLUMNS;
   const cols = [...new Set([L.INVENTDIM, LC.brand, LC.roundNo].filter(Boolean))];
@@ -62,12 +64,13 @@ async function summarizeLines(id, guid) {
 
   const list = [...zones].map(([zone, locs]) => ({
     zone,
+    missing: zone === NOT_FOUND,
     lines: [...locs.values()].reduce((a, b) => a + b, 0),
     locations: [...locs].map(([location, n]) => ({ location, lines: n }))
                         .sort((a, b) => byText(a.location, b.location))
-  })).sort((a, b) => (a.zone === NOT_FOUND) - (b.zone === NOT_FOUND) || byText(a.zone, b.zone));
+  })).sort((a, b) => a.missing - b.missing || byText(a.zone, b.zone));
 
-  const found = list.filter((z) => z.zone !== NOT_FOUND);
+  const found = list.filter((z) => !z.missing);
   const distinct = (c) => c
     ? [...new Set(rows.map((r) => shown(r, c)).filter((v) => v !== null && v !== undefined && v !== ""))]
         .map(String).sort(byText)

@@ -73,6 +73,7 @@
   .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8mm; }
   .doc-type { font-size: 9pt; color: #444; }
   .doc-no   { font-size: 20pt; font-weight: bold; line-height: 1.15; margin: 0; }
+  .doc-desc { font-size: 11pt; font-weight: bold; margin-top: 0.8mm; }
   .meta     { font-size: 8.5pt; margin-top: 1.5mm; line-height: 1.6; }
   .qr-box { width: 30mm; text-align: center; flex: none; }
   .qr-box svg { width: 28mm; height: 28mm; display: block; margin: 0 auto; }
@@ -138,6 +139,7 @@
     <div>
       <div class="doc-type">ใบ Recheck สินค้า</div>
       <h1 class="doc-no" id="docNo"></h1>
+      <div class="doc-desc" id="docDesc" hidden></div>
       <div class="meta">
         <div id="metaLine1"></div>
         <div id="metaLine2"></div>
@@ -254,8 +256,8 @@
     if (AUTO_PRINT && !isDemo) setTimeout(() => window.print(), 300);
   }
 
-  // doc = { roundId, warehouse, createdOn, lines: null | { error } | { count, zoneCount, locationCount,
-  //         notFound, brands, roundNos, zones: [{ zone, lines, locations: [{ location, lines }] }] } }
+  // doc = { roundId, description, warehouse, createdOn, lines: null | { error } | { count, zoneCount,
+  //         locationCount, notFound, brands, roundNos, zones: [{ zone, missing, lines, locations: [{ location, lines }] }] } }
   function render(doc) {
     const rid = doc.roundId;
     const sep = " &nbsp;·&nbsp; ";
@@ -277,6 +279,8 @@
     times.push("พิมพ์ " + fmtDate(new Date()));
 
     $("docNo").textContent = rid;
+    $("docDesc").textContent = doc.description || "";
+    $("docDesc").hidden = !doc.description;
     $("metaLine1").innerHTML = l1.join(sep);
     $("metaLine2").innerHTML = (counts.length ? counts.join(sep) + " &nbsp;&nbsp;|&nbsp;&nbsp; " : "") + times.join(sep);
 
@@ -299,7 +303,7 @@
     if (!L.count) return '<p class="lines-note">ยังไม่มีรายการ Lines ใน Recheck นี้</p>';
 
     const rows = L.zones.map((z) => {
-      const nf = z.zone === "ไม่พบใน InventDim";
+      const nf = z.missing;
       return '<tr' + (nf ? ' class="nf"' : "") + ">" +
         '<td class="z">' + esc(z.zone) + "</td>" +
         '<td class="locs">' + z.locations.map((l) =>
@@ -314,7 +318,7 @@
       '<th class="n">Location</th><th class="n">Line</th></tr></thead>' +
       "<tbody>" + rows + "</tbody>" +
       '<tfoot><tr><td>รวม</td><td>' + L.zoneCount + " Zone" +
-      (L.notFound ? ' &nbsp;·&nbsp; <span style="color:#b00020">ไม่พบใน InventDim ' + L.notFound + " line</span>" : "") +
+      (L.notFound ? ' &nbsp;·&nbsp; <span style="color:#b00020">ไม่พบใน InventDim (DAL) ' + L.notFound + " line</span>" : "") +
       '</td><td class="n">' + L.locationCount + '</td><td class="n">' + L.count + "</td></tr></tfoot>" +
       "</table>";
   }
@@ -349,7 +353,7 @@
   function demoRound(id) {
     const r = demoRounds().find((x) => x.roundId === id) || demoRounds()[0];
     return {
-      roundId: r.roundId, warehouse: "DAL, 01", createdOn: r.createdOn,
+      roundId: r.roundId, description: r.description, warehouse: "DAL", createdOn: r.createdOn,
       lines: demoLines()
     };
   }
@@ -360,12 +364,12 @@
       ["1P", [["1P-3-11", 27]]],
       ["3Q", [["3Q-1-01", 4], ["3Q-1-02", 9], ["3Q-1-03", 2], ["3Q-2-01", 5], ["3Q-2-02", 7], ["3Q-2-03", 1],
               ["3Q-3-01", 3], ["3Q-3-02", 6], ["3Q-3-03", 2], ["3Q-4-01", 8], ["3Q-4-02", 1], ["3Q-4-03", 4]]],
-      ["ไม่พบใน InventDim", [["#0DAL0001500FFFFF", 2]]]
-    ].map(([zone, locs]) => ({
-      zone, lines: locs.reduce((a, [, n]) => a + n, 0),
+      ["ไม่พบใน InventDim (DAL)", [["#0000000150018EF6", 2]]]
+    ].map(([zone, locs], i, all) => ({
+      zone, missing: i === all.length - 1, lines: locs.reduce((a, [, n]) => a + n, 0),
       locations: locs.map(([location, lines]) => ({ location, lines }))
     }));
-    const found = zones.filter((z) => z.zone !== "ไม่พบใน InventDim");
+    const found = zones.filter((z) => !z.missing);
     return {
       count: zones.reduce((a, z) => a + z.lines, 0),
       zoneCount: found.length,

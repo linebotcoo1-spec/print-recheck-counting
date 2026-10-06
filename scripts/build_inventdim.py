@@ -1,9 +1,9 @@
 """แปลง InventDim.xlsx → api/_lib/inventdim.js  (map inventDimId → [Location, Zone])
 
-ใช้:  python scripts/build_inventdim.py "C:/path/to/InventDim.xlsx"
+ใช้:  python scripts/build_inventdim.py "C:/path/to/InventDim.xlsx" [Warehouse]   (ค่าเริ่มต้น DAL)
 แล้ว commit + push ไฟล์ api/_lib/inventdim.js  (Vercel deploy ให้อัตโนมัติ)
 
-คอลัมน์ที่ใช้: inventDimId, wMSLocationId, Zone
+คอลัมน์ที่ใช้: inventDimId, Warehouse, wMSLocationId, Zone — เก็บเฉพาะแถวของ Warehouse ที่ระบุ
 Excel แปลง Location บางตัวเป็นวันที่ (เช่น "09-01" → 9 ม.ค.) หรือเป็นตัวเลข — สคริปต์แปลงกลับเป็นข้อความเดิม
 """
 import datetime
@@ -30,26 +30,27 @@ def key(v):
     return text(v).lstrip("#").upper()
 
 
-def main(src):
+def main(src, warehouse):
     ws = openpyxl.load_workbook(src, read_only=True, data_only=True).worksheets[0]
     rows = ws.iter_rows(values_only=True)
     header = [text(h) for h in next(rows)]
-    i_id, i_loc, i_zone = (header.index(c) for c in ("inventDimId", "wMSLocationId", "Zone"))
+    i_id, i_wh, i_loc, i_zone = (header.index(c) for c in ("inventDimId", "Warehouse", "wMSLocationId", "Zone"))
 
     data = {}
     for r in rows:
         k = key(r[i_id])
-        if k:
+        if k and text(r[i_wh]).upper() == warehouse:
             data[k] = [text(r[i_loc]), text(r[i_zone])]
 
     OUT.write_text(
-        "// สร้างจาก InventDim.xlsx ด้วย scripts/build_inventdim.py — ห้ามแก้มือ\n"
+        f"// สร้างจาก InventDim.xlsx (Warehouse {warehouse}) ด้วย scripts/build_inventdim.py — ห้ามแก้มือ\n"
         "// key = inventDimId (ตัด # นำหน้า, ตัวพิมพ์ใหญ่) → [Location, Zone]\n"
         "export default " + json.dumps(data, ensure_ascii=False, separators=(",", ":")) + ";\n",
         encoding="utf-8",
     )
-    print(f"{len(data):,} รายการ → {OUT}  ({OUT.stat().st_size / 1024:,.0f} KB)")
+    print(f"{warehouse}: {len(data):,} รายการ → {OUT}  ({OUT.stat().st_size / 1024:,.0f} KB)")
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "InventDim.xlsx")
+    main(sys.argv[1] if len(sys.argv) > 1 else "InventDim.xlsx",
+         (sys.argv[2] if len(sys.argv) > 2 else "DAL").upper())
