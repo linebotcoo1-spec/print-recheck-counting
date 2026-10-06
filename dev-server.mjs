@@ -23,7 +23,7 @@ http.createServer(async (req, res) => {
     const rel = pathname === "/" ? "index.html" : pathname.slice(1);
     if (rel !== "index.html" && !/^lib\/[\w.-]+\.js$/.test(rel)) throw Object.assign(new Error(), { code: "ENOENT" });
     const body = await readFile(path.join(root, rel));
-    res.writeHead(200, { "Content-Type": TYPES[path.extname(rel)] });
+    res.writeHead(200, { "Content-Type": TYPES[path.extname(rel)], "Cache-Control": "no-store" });  // แก้ไฟล์แล้วรีเฟรชเห็นทันที
     res.end(body);
   } catch (e) {
     const notFound = e.code === "ENOENT" || e.code === "ERR_MODULE_NOT_FOUND";
