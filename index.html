@@ -276,7 +276,12 @@
   async function api(path) {
     const res = await fetch(path, { headers: { Accept: "application/json" } });
     const data = await res.json().catch(() => null);
-    if (!res.ok) throw new Error((data && data.error) || "เรียก API ไม่สำเร็จ (" + res.status + ")");
+    if (!res.ok) {
+      // error จากโค้ดเรา = ข้อความ, error จาก Vercel เอง = { code, message }
+      const err = data && data.error;
+      const msg = typeof err === "string" ? err : err && err.message;
+      throw new Error("เรียก API ไม่สำเร็จ (" + res.status + ")" + (msg ? " — " + msg : ""));
+    }
     return data;
   }
 

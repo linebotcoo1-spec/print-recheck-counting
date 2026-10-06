@@ -1,8 +1,10 @@
-.env
-.env.*
-!.env.example
-dev-server.mjs
-README.md
-config.js
-lib/msal-browser.min.js
-.nojekyll
+# ขึ้นต้นด้วย / = เฉพาะไฟล์ที่ root (ถ้าไม่มี / จะตัดไฟล์ชื่อเดียวกันในโฟลเดอร์ย่อยด้วย เช่น api/_lib/config.js)
+/.env
+/.env.*
+!/.env.example
+/.claude
+/dev-server.mjs
+/README.md
+/config.js
+/lib/msal-browser.min.js
+/.nojekyll
