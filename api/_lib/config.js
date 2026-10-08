@@ -30,6 +30,8 @@ export const LINES = {
   //   RoundId บน Lines เป็น Lookup  :  "_crb2f_roundid_value eq {guid}"
   FILTER: "crb2f_roundid eq '{id}'",
   INVENTDIM: "crb2f_inventdimids",      // คอลัมน์ inventDimId บน Lines
+  // คลังที่ใบพิมพ์แสดงแค่รายการ Location ที่ต้องไป (ไม่แบ่ง Zone) — คลังอื่นแสดงตาราง Zone → Location
+  LOCATION_ONLY: ["HO"],
   COLUMNS: {                            // ไม่บังคับ — เว้น "" ถ้าไม่มี
     brand:   "",
     roundNo: ""

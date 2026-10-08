@@ -92,6 +92,13 @@
   table.zones tfoot td { font-weight: bold; border-top: 1.2px solid var(--ink); border-bottom: 0; }
   .loc { display: inline-block; white-space: nowrap; margin-right: 4.5mm; }
   .loc small { color: var(--muted); font-size: 7.5pt; }
+  /* ---------- รายการ Location (คลัง HO) ---------- */
+  .loc-head { font-size: 10pt; margin-top: 3mm; padding-bottom: 1.2mm; border-bottom: 1.2px solid var(--ink); }
+  .loc-head small { color: var(--muted); font-size: 8pt; }
+  .locgrid { columns: 4 40mm; column-gap: 6mm; margin-top: 1mm; font-size: 10pt; }
+  .locgrid .loc { break-inside: avoid; padding: 1.3mm 0; border-bottom: 0.5px solid #bbb; white-space: nowrap; }
+  .locgrid .loc small { color: var(--muted); font-size: 8pt; }
+  .loc-foot { font-size: 9pt; font-weight: bold; margin-top: 2mm; padding-top: 1.2mm; border-top: 1.2px solid var(--ink); }
   .lines-note { font-size: 9pt; margin-top: 3mm; }
   .lines-note.error { color: #b00020; font-weight: bold; }
 
@@ -269,8 +276,8 @@
     if (L.roundNos && L.roundNos.length) l1.push("รอบที่: <b>" + esc(L.roundNos.join(", ")) + "</b>");
 
     const counts = [];
-    if (L.zones) {
-      counts.push("<b>" + L.zoneCount + "</b> Zone");
+    if (L.zones || L.locations) {
+      if (L.zones) counts.push("<b>" + L.zoneCount + "</b> Zone");
       counts.push("<b>" + L.locationCount + "</b> Location");
       counts.push("<b>" + L.count + "</b> Line");
     }
@@ -291,16 +298,24 @@
     $("qr").innerHTML = qr.createSvgTag({ cellSize: 4, margin: 16, scalable: true });
     $("qrCap").textContent = rid;
 
-    $("lines").innerHTML = renderLines(doc.lines);
+    $("lines").innerHTML = renderLines(doc.lines, doc.warehouse);
     document.title = "ใบ Recheck " + rid;
     $("sheet").hidden = false;
   }
 
-  // ตาราง Zone → Location (จำนวน line ในวงเล็บ)
-  function renderLines(L) {
+  // คลังทั่วไป: ตาราง Zone → Location · คลังใน LOCATION_ONLY (HO): รายการ Location ที่ต้องไป
+  // (จำนวน line ในวงเล็บ)
+  function renderLines(L, warehouse) {
     if (!L) return "";
     if (L.error) return '<p class="lines-note error">ดึงรายการ Lines ไม่สำเร็จ — ' + esc(L.error) + "</p>";
-    if (!L.count) return '<p class="lines-note">ไม่มีรายการ Lines ของคลัง DAL ใน Recheck นี้</p>';
+    if (!L.count) return '<p class="lines-note">ไม่มีรายการ Lines ของคลัง ' + esc(warehouse || "") + " ใน Recheck นี้</p>";
+
+    if (L.mode === "locations") {
+      return '<div class="loc-head"><b>Location ที่ต้องไป</b> <small>(จำนวน line) · เรียงตามชั้นวาง</small></div>' +
+        '<div class="locgrid">' + L.locations.map((l) =>
+          '<div class="loc">' + esc(l.location) + " <small>(" + l.lines + ")</small></div>").join("") + "</div>" +
+        '<div class="loc-foot">รวม ' + L.locationCount + " Location · " + L.count + " Line</div>";
+    }
 
     const rows = L.zones.map((z) =>
       "<tr>" +
@@ -344,14 +359,25 @@
       ["RC26-00010", "2026-10-05T08:40:00Z", "Recheck โซน 1N หลังย้ายชั้นวาง"],
       ["RC26-00009", "2026-10-04T03:15:00Z", "นับซ้ำ Brand AISIN รอบ 2"],
       ["RC26-00008", "2026-10-03T07:02:00Z", "Recheck สินค้าคืนจากลูกค้า"],
-      ["RC26-00007", "2026-10-02T01:30:00Z", ""]
+      ["RC26-00007", "2026-10-02T01:30:00Z", ""],
+      ["RC26-00006", "2026-10-01T03:00:00Z", "Recheck HO ชั้น 2 โซน BA"]
     ].map(([roundId, createdOn, description]) => ({ roundId, createdOn, description }));
   }
   function demoRound(id) {
     const r = demoRounds().find((x) => x.roundId === id) || demoRounds()[0];
+    const ho = r.roundId === "RC26-00006";
     return {
-      roundId: r.roundId, description: r.description, warehouse: "DAL", createdOn: r.createdOn,
-      lines: demoLines()
+      roundId: r.roundId, description: r.description, warehouse: ho ? "HO" : "DAL", createdOn: r.createdOn,
+      lines: ho ? demoLocations() : demoLines()
+    };
+  }
+  function demoLocations() {
+    const locs = [];
+    for (const [aisle, rows] of [["BA04", 6], ["BA06", 5], ["BA12", 8]])
+      for (let i = 1; i <= rows; i++) locs.push({ location: aisle + "-" + String(i * 2).padStart(2, "0") + "-" + "ABCDE"[i % 5] + (1 + i % 2), lines: 1 + (i * 7) % 5 });
+    return {
+      mode: "locations", count: locs.reduce((a, l) => a + l.lines, 0), locationCount: locs.length,
+      brands: null, roundNos: null, locations: locs
     };
   }
   function demoLines() {
